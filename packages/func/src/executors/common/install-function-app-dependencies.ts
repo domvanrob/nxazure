@@ -1,15 +1,21 @@
 import { detectPackageManager, ExecutorContext, getPackageManagerCommand } from '@nx/devkit';
 import { execSync } from 'child_process';
+import { createPnpmWorkspaceScope } from './pnpm-workspace-scope';
 
-const getPackageInstallCommand = () => {
+export const installFunctionAppDependencies = (context: Pick<ExecutorContext, 'cwd' | 'isVerbose' | 'target'>, appRoot: string): void => {
   const rawInstallCommand = getPackageManagerCommand().install;
+  const isPnpm = detectPackageManager() === 'pnpm';
+  const pnpmWorkspaceScope = isPnpm ? createPnpmWorkspaceScope(context.cwd, appRoot) : null;
 
-  const packageManager = detectPackageManager();
-  return packageManager === 'pnpm' ? `${rawInstallCommand} --node-linker=hoisted --ignore-workspace` : rawInstallCommand;
-};
+  const installCommand = pnpmWorkspaceScope
+    ? `${rawInstallCommand} --node-linker=hoisted${pnpmWorkspaceScope.additionalInstallFlags}`
+    : rawInstallCommand;
 
-export const installFunctionAppDependencies = (context: Pick<ExecutorContext, 'isVerbose' | 'target'>, appRoot: string) => {
-  const installCommand = getPackageInstallCommand();
   if (context.isVerbose) console.log(`Running ${context.target?.executor} command: ${installCommand}.`);
-  execSync(installCommand, { stdio: 'inherit', cwd: appRoot });
+
+  try {
+    execSync(installCommand, { stdio: 'inherit', cwd: appRoot });
+  } finally {
+    pnpmWorkspaceScope?.dispose();
+  }
 };
